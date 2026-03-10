@@ -1,0 +1,23 @@
+artifact_path: file:///d:/projects/water-quality-prediction/notebooks/mlruns/1/models/m-a8ea1d41228d4d328717c63dd26cc760/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.10.19
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.7.2
+    skops_trusted_types: null
+mlflow_version: 3.9.0
+model_id: m-a8ea1d41228d4d328717c63dd26cc760
+model_size_bytes: 416754
+model_uuid: m-a8ea1d41228d4d328717c63dd26cc760
+prompts: null
+run_id: d2ce039e9d5e457ba5735f6bd03ac35b
+utc_time_created: '2026-03-10 07:38:10.291918'
