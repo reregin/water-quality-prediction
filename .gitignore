@@ -8,6 +8,9 @@ data/raw/*
 !data/raw/.gitkeep
 data/submission
 
+# MLFlow
+notebooks/mlruns
+
 # Environment
 .env
 .venv
