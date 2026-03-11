@@ -11,6 +11,9 @@ data/submission
 # MLFlow
 notebooks/mlruns
 
+# Models
+models/
+
 # Environment
 .env
 .venv

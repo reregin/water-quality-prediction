@@ -6,7 +6,7 @@ MLFLOW_URI = "sqlite:///../mlflow.db"
 
 def load_data():
     # Reads from your local laptop path
-    return pd.read_parquet("../data/processed/data_with_regions.parquet")
+    return pd.read_parquet("../data/interim/master_train.parquet")
 
 def save_artifacts(preprocessor, model, run_name):
     os.makedirs('../models', exist_ok=True)
