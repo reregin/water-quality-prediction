@@ -539,3 +539,64 @@
 ### The Tech Debt
 - Notebook execution is still stateful; converting the freeze/submission path into idempotent functions or a script entrypoint would further reduce order-dependent breakage.
 
+## 2026-03-13 - Added high-ROI engineered features in 03_model_training
+
+### The Change
+- Replaced no-op feature engineering in [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) with a concrete `engineer_features(...)` implementation and applied it to train data before feature-set construction.
+- Implemented the requested high-ROI feature blocks:
+  1. **Temporal cyclics** from `Sample_Date` / `Sample Date`:
+     - `month_sin`, `month_cos`, `doy_sin`, `doy_cos`, `is_wet_season`
+  2. **SANLC year deltas** for matched class pairs:
+     - `sanlc_delta_<class> = sanlc2022_pct_<class> - sanlc2020_pct_<class>`
+     - `sanlc_abs_delta_<class> = abs(delta)`
+  3. **SANLC thematic aggregates** by year + delta:
+     - theme shares for `urban`, `agri`, `wetland`, `water`, `mining`, `natural_veg`, `bare`
+     - total SANLC share per year
+     - per-theme and total deltas (`2022 - 2020`)
+- Added summary printout of engineered-column count and sample names after train feature engineering is applied.
+
+### The Reasoning
+- With limited time and submission budget, feature signal expansion is higher expected ROI than broad model churn.
+- SANLC 2020/2022 are especially suitable for change-based features, which can capture dynamics missed by static shares.
+- Temporal cyclics introduce seasonal structure without introducing high-leakage transforms.
+
+### The Tech Debt
+- Theme assignment is keyword-based and heuristic; a maintained class-to-theme mapping table would be more robust.
+- This introduces many additional columns; if runtime balloons, we may need quick pruning based on feature importance or stability gates.
+
+## 2026-03-13 - Fixed engineered-feature inclusion in PRIMARY_FEATURE_SET
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) feature-set assembly (cell 13) to remove the contract-only bottleneck:
+  - `FULL_NUMERIC` now builds from the union of:
+    - contract-backed base columns (when available), and
+    - all current dataframe columns after feature engineering (`df`), excluding reserved runtime/target fields.
+- Kept numeric-only filtering for compatibility with the current numeric preprocessor.
+- Added explicit diagnostic prints:
+  - count of engineered columns included in `FULL_NUMERIC`
+  - sample list of included engineered columns.
+
+### The Reasoning
+- Engineered columns were created in `engineer_features(...)` but could be excluded when `contract_cols` existed, causing a train-time feature disconnect.
+- This patch ensures engineered features actually participate in model training without breaking schema safety.
+
+### The Tech Debt
+- The dataframe-wide union may include additional numeric columns beyond intended scope; if needed, we can tighten with an explicit allowlist in a follow-up patch.
+
+## 2026-03-13 - Added fast FE ablation toggle (disable per-class SANLC deltas by default)
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) feature-engineering cell to support quick ablation:
+  - added `FE_INCLUDE_CLASS_DELTAS = False` default
+  - per-class SANLC delta generation (`sanlc_delta_*`, `sanlc_abs_delta_*`) now runs only when toggle is `True`
+  - keeps temporal cyclic features and SANLC thematic aggregate features active.
+- Added cleanup logic in `engineer_features(...)` to drop previously generated engineered columns when rerunning the cell in the same kernel, preventing accumulation/stale feature carry-over.
+- Added explicit printout of FE toggle state for run traceability.
+
+### The Reasoning
+- The previous FE batch showed mixed performance and runtime increase; disabling high-cardinality per-class deltas is a fast way to reduce noise and collinearity while preserving the highest-ROI aggregate signals.
+- Cleanup on rerun avoids hidden state artifacts during rapid notebook iteration.
+
+### The Tech Debt
+- Theme-based aggregate engineering remains heuristic; future refinement may need target-specific feature selection to avoid over-expansion.
+
