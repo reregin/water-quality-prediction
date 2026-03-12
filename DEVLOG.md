@@ -325,3 +325,69 @@
 - Target correlation screening currently uses sampled Spearman correlation; robustness can be improved with repeated-seed summaries if needed.
 - Geography and LOSO sections remain dependent on geo/date columns and will still be skipped/fail if those fields are absent in future interim snapshots.
 
+## 2026-03-12 - Added SANLC-specific schema and coverage diagnostics in EDA
+
+### The Change
+- Updated [01_eda_and_discovery.ipynb](d:/projects/water-quality-prediction/notebooks/01_eda_and_discovery.ipynb) with a new section:
+  - `### SANLC Coverage And Schema Diagnostics`
+- Added a dedicated SANLC code cell (after validation inspection, before train-vs-valid comparison) that:
+  - detects SANLC columns by prefix (`sanlc2020_pct_`, `sanlc2022_pct_`)
+  - compares train SANLC schema vs validation SANLC schema
+  - reports train-only and valid-only SANLC columns
+  - constructs `df_validation_sanlc_aligned` by adding missing train SANLC columns to validation with `0.0`
+  - summarizes SANLC per-column behavior (`non_null_pct`, `zero_pct`, `mean`, `p95`, `max`) for train and aligned validation
+  - computes row-wise SANLC percentage-sum summaries for 2020 and 2022 blocks
+  - prints a concrete feature-contract checklist for train/test alignment.
+- Verified notebook code-cell syntax after insertion.
+
+### The Reasoning
+- Current modeling issues include train/validation feature-count mismatch likely driven by absent SANLC classes in validation geography.
+- A SANLC-only diagnostic makes this mismatch explicit and provides a reproducible zero-fill alignment path before model training.
+- Row-sum summaries provide a quick sanity check that aligned coverage behaves plausibly after column harmonization.
+
+### The Tech Debt
+- SANLC prefix matching is rule-based; if naming conventions change, this detection cell must be updated.
+- Alignment is currently notebook-local (`df_validation_sanlc_aligned`); production training/inference should move this contract into shared preprocessing utilities.
+
+## 2026-03-12 - Implemented feature-contract handoff (01 -> 02) and schema-aligned preprocessing
+
+### The Change
+- Updated [01_eda_and_discovery.ipynb](d:/projects/water-quality-prediction/notebooks/01_eda_and_discovery.ipynb) with a new export section:
+  - `### Export Feature Contract For Preprocessing`
+  - writes `../data/interim/feature_contract_master_iteration.txt` (feature columns, one per line)
+  - writes `../data/interim/feature_contract_master_iteration_meta.json` (dtype map, targets, SANLC count, source metadata).
+- Rewrote [02_preprocessing.ipynb](d:/projects/water-quality-prediction/notebooks/02_preprocessing.ipynb) into a contract-driven alignment pipeline:
+  - loads train/test iteration parquet files
+  - loads contract from TXT (or derives fallback from train)
+  - enforces target-leakage guard (targets cannot appear in feature contract)
+  - aligns test to train contract:
+    - adds missing contract columns
+    - fills missing SANLC columns with `0.0`
+    - fills other missing contract columns with `NaN`
+    - drops extra non-target test columns
+    - reorders columns to exact contract order
+    - attempts dtype harmonization to train dtypes
+  - runs pre-model checks:
+    - schema parity
+    - missing-after-alignment summary
+    - SANLC row-sum sanity summary
+    - geo/time-key presence check for pseudo-spatial readiness
+  - saves aligned artifacts:
+    - `../data/interim/master_train_iteration_aligned.parquet`
+    - `../data/interim/master_test_iteration_aligned.parquet`
+    - `../data/interim/feature_alignment_report_master_iteration.csv`.
+
+### The Reasoning
+- You requested a direct handoff from EDA insights into preprocessing before modeling.
+- Contract export in `01` creates a stable schema artifact you can reuse and paste/reference in `02`.
+- Contract-driven alignment in `02` operationalizes the “best plan before 03”:
+  - freeze schema
+  - align test to train contract
+  - run leakage/sanity gates
+  - produce reproducible aligned datasets.
+
+### The Tech Debt
+- Non-SANLC missing test columns are currently `NaN`-filled by default; target-aware imputation policy should be added next if those columns exist.
+- Contract currently includes all non-target train columns; if you want strict model feature subsets, add a second “model_contract” artifact.
+- Pseudo-spatial split itself is not executed in `02`; this notebook only verifies geo/time key readiness for that next stage.
+
