@@ -624,3 +624,23 @@
 - Sweep size is now larger and runtime will increase materially; if needed, reduce model list or finalists depth per target.
 - Current challenger/default params are fixed; lightweight target-wise tuning may still be needed for best effect.
 
+
+## 2026-03-13 - Switched 02_preprocessing pipeline paths from iteration to terra artifacts
+
+### The Change
+- Updated [02_preprocessing.ipynb](d:/projects/water-quality-prediction/notebooks/02_preprocessing.ipynb) path constants to Terra dataset naming:
+  - `TRAIN_PATH` -> `../data/interim/master_train_terra.parquet`
+  - `TEST_PATH` -> `../data/interim/master_test_terra.parquet`
+  - `CONTRACT_TXT_PATH` -> `../data/interim/feature_contract_master_terra.txt`
+  - `CONTRACT_META_PATH` -> `../data/interim/feature_contract_master_terra_meta.json`
+  - `OUT_TRAIN_PATH` -> `../data/interim/master_train_terra_aligned.parquet`
+  - `OUT_TEST_PATH` -> `../data/interim/master_test_terra_aligned.parquet`
+  - `OUT_REPORT_PATH` -> `../data/interim/feature_alignment_report_master_terra.csv`
+- Updated matching notebook text outputs/listed artifact paths to Terra names for consistency.
+
+### The Reasoning
+- Current EDA and incoming features are being run on Terra-enriched files, so preprocessing had to be aligned to the same source and output naming to avoid train/inference schema drift and accidental use of stale iteration artifacts.
+
+### The Tech Debt
+- [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) still points to `*_iteration*` candidates and should be updated next to consume `*_terra_aligned*` outputs consistently.
+- Existing historical contract files from iteration runs remain in `data/interim`; cleanup policy is not yet standardized.
