@@ -219,3 +219,79 @@
 - Helper functions/imports from the prior sweep remain in notebook context and can be cleaned in a later pass.
 - DRP hedge alphas are fixed heuristics (`0.50`, `0.35`); they should be tuned against a pseudo-spatial validation target once a stable proxy is finalized.
 
+## 2026-03-12 - 03_model_training switched to RF-only spatial sweep
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) model configuration to RF-only mode while preserving the existing spatial GroupKFold + pseudo-holdout workflow.
+- Replaced mixed model bank (Ridge/Lasso/Elastic/XGB/RF) with:
+  - `RF_n600_raw`
+  - `RF_n600_Log`
+- Updated target sweep so all targets (`Total Alkalinity`, `Electrical Conductance`, `Dissolved Reactive Phosphorus`) evaluate only those two RF variants.
+- Updated `DRP_SAFE_MODELS` to RF-only list for manifest selection consistency.
+
+### The Reasoning
+- Current goal is to remove model-family variance and establish a stable spatial baseline before rebuilding complexity.
+- Keeping only RF variants makes score movement easier to attribute to split strategy and post-processing rather than architecture churn.
+
+### The Tech Debt
+- Unused imports and legacy model-construction paths remain in notebook context and should be cleaned in a future hygiene pass.
+- RF-only search space is intentionally narrow and may cap upside until new features arrive.
+
+## 2026-03-12 - Cleared stale notebook outputs after RF-only patch
+
+### The Change
+- Cleared `execution_count` and `outputs` for all code cells in [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) so cached historical results no longer show pre-patch mixed-model artifacts.
+
+### The Reasoning
+- Old cached outputs (XGB/Ridge/Lasso traces) made it appear that RF-only changes were not applied.
+- Clearing outputs ensures the visible notebook state matches current source logic and avoids confusion during reruns.
+
+### The Tech Debt
+- Notebook output history is now removed; rerun is required to regenerate diagnostics and tables.
+
+## 2026-03-12 - Added dummy-baseline diagnostics to spatial RF evaluation
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) grouped spatial evaluation pipeline to compute a dummy baseline (target median predictor) on the exact same folds and pseudo-holdout split as the trained model.
+- Extended `grouped_oof_eval(...)` outputs with:
+  - `dummy_r2`, `dummy_rmse`, `dummy_mae`
+  - `dummy_mean_fold_r2`, `dummy_min_fold_r2`, `dummy_holdout_r2`
+  - deltas vs dummy: `delta_r2_vs_dummy`, `delta_min_fold_r2_vs_dummy`, `delta_holdout_r2_vs_dummy`
+- Updated scout/full loops to:
+  - log dummy and delta metrics to MLflow
+  - include dummy/delta columns in `scout_df` and `full_df`
+  - print model-vs-dummy comparisons inline for quick gating.
+- Fixed generated scout/full print formatting issues and validated notebook code-cell syntax.
+
+### The Reasoning
+- Global/spatial metrics alone were hard to trust without a no-skill reference.
+- Dummy baseline on identical splits provides a concrete floor; RF should consistently beat it before any further complexity is justified.
+
+### The Tech Debt
+- Current selection score still ranks by model metrics only; an explicit gate on `delta_r2_vs_dummy` / `delta_holdout_r2_vs_dummy` can be added next.
+
+## 2026-03-12 - Added hard dummy-gate manifests and DRP fallback hedge for submission shots
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) finalist selection to use a hard gate:
+  - candidates with `delta_holdout_r2_vs_dummy > 0` are preferred
+  - if none pass, fallback to the best available row for that target
+- Added `pick_with_gate(...)` and rebuilt `manifest_A` / `manifest_B` with target-wise RF preferences:
+  - TA prefers `RF_n600_raw`
+  - EC prefers `RF_n600_Log` for A, open best gated choice for B
+  - DRP prefers `RF_n600_Log` but is still gate-controlled
+- Added `DRP_DELTA_HOLDOUT` and `DRP_USE_MODEL` flags and wired them into submission generation:
+  - when DRP fails gate, Shot A/B/C use train median for DRP
+  - when DRP passes gate, Shot A uses model DRP, Shot B/C use model-to-median hedge blends
+- Updated feature-availability checks so DRP model features are required only when `DRP_USE_MODEL=True`.
+
+### The Reasoning
+- DRP was the dominant failure mode and could destroy a full submission even when TA/EC were acceptable.
+- Gating against dummy on pseudo-holdout gives a practical safety boundary for whether DRP model signal is trustworthy.
+- Explicit fallback keeps the pipeline deterministic and avoids forcing weak DRP predictions into every submission variant.
+
+### The Tech Debt
+- Gate threshold is currently binary at `0`; it may still be noisy with limited pseudo-holdout representativeness.
+- TA/EC/DRP target preferences are hardcoded and should eventually be parameterized for faster experimentation.
+- The notebook still carries legacy cells/markdown from prior model families that can be pruned in a cleanup pass.
+
