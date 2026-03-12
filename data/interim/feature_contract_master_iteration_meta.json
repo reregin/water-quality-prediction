@@ -1,7 +1,8 @@
 {
-  "source_dataset": "../data/interim/master_train_iteration.parquet",
+  "train_path": "..\\data\\interim\\master_train_iteration.parquet",
+  "test_path": "..\\data\\interim\\master_test_iteration.parquet",
   "n_train_rows": 9319,
-  "n_total_columns": 169,
+  "n_test_rows": 200,
   "n_feature_columns": 166,
   "target_columns": [
     "Total Alkalinity",
