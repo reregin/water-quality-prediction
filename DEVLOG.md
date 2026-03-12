@@ -391,3 +391,151 @@
 - Contract currently includes all non-target train columns; if you want strict model feature subsets, add a second “model_contract” artifact.
 - Pseudo-spatial split itself is not executed in `02`; this notebook only verifies geo/time key readiness for that next stage.
 
+## 2026-03-12 - 03_model_training switched to aligned iteration data sources with contract guards
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) data loading to prioritize aligned iteration artifacts produced by preprocessing:
+  - train candidates:
+    - `../data/interim/master_train_iteration_aligned.parquet`
+    - `../data/interim/master_train_iteration.parquet`
+    - fallback `../data/interim/water_quality_mvp_baseline.parquet`
+  - validation candidates:
+    - `../data/interim/master_test_iteration_aligned.parquet`
+    - `../data/interim/master_test_iteration.parquet`
+    - fallback `../data/interim/water_quality_mvp_validation.parquet`
+- Added path resolver helper (`pick_first_existing`) and explicit prints for selected train/validation inputs.
+- Added optional feature-contract schema check via:
+  - `../data/interim/feature_contract_master_iteration.txt`
+  - verifies every contract column exists in both train and validation before training starts.
+- Updated submission inference cell to read validation from `VALID_PATH` (same resolved source as split setup), removing hardcoded MVP validation path dependency.
+- Updated the diagnostics summary cell to derive its feature list from active `FEATURE_SETS['C']` instead of a hardcoded 4-feature list.
+
+### The Reasoning
+- You requested proceeding with the current 03 workflow while making minimal adjustments for new data readiness.
+- This keeps model logic stable (RF + gating + DRP hedge) while enforcing schema consistency with the new contract-aligned preprocessing outputs.
+- Using the same resolved validation source across split setup and submission generation avoids accidental source mismatch.
+
+### The Tech Debt
+- 03 still uses a single feature-set recipe (`C`) by default; richer aligned features are available but intentionally not expanded in this patch to avoid uncontrolled variance.
+- Contract guard is optional (only active when TXT exists); making it mandatory could be a next hardening step once pipeline order is fixed.
+
+## 2026-03-12 - Added tqdm progress tracking to 03_model_training execution loops
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) to include `tqdm` progress indicators:
+  - Added import: `from tqdm.auto import tqdm`
+  - Added fold-level progress in `grouped_oof_eval(...)` with optional controls:
+    - new args: `show_fold_progress=False`, `fold_desc=None`
+    - GroupKFold loop now runs through `tqdm(..., total=n_splits, unit='fold')`
+  - Added scout-level progress bars:
+    - target loop: `tqdm(TARGET_COLS, desc='Scout targets')`
+    - per-target model loop: `tqdm(recipes, desc=f'Scout {target}')`
+  - Added full-stage progress bar:
+    - finalist loop: `tqdm(finalist_df.iterrows(), total=len(finalist_df), desc='Full finalists')`
+  - Enabled fold progress in scout/full `grouped_oof_eval(...)` calls via:
+    - `show_fold_progress=True`
+    - informative `fold_desc` labels.
+
+### The Reasoning
+- Training/evaluation runtime is multi-minute and users need real-time visibility into stage and fold progression.
+- Progress bars were added without changing model-selection logic or scoring behavior.
+
+### The Tech Debt
+- Nested progress bars can appear busy in some notebook frontends; if output becomes noisy, fold-level tqdm can be toggled off via `show_fold_progress=False`.
+
+## 2026-03-12 - Marked non-essential 03_model_training cells as optional for lean runs
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) to keep core training path intact while disabling non-essential diagnostics by default:
+  - cell `9`: `df.info()` schema print (commented)
+  - cell `25`: legacy constants (`TARGET_GLOBAL_R2_FLOOR`, `DRP_SAFE_MODELS`) currently unused by active manifest logic (commented)
+  - cell `28`: feature/target describe diagnostic (commented)
+  - cell `34`: post-submission diagnostic summary tables (commented)
+- Added a `Lean Run Guide` note in the top markdown cell indicating these optional cells are pre-commented for faster execution.
+
+### The Reasoning
+- You asked to comment cells you do not need to run.
+- This reduces notebook noise/runtime overhead while preserving the active RF + gating + submission workflow.
+- It also makes clear that `FEATURE_SETS` is still actively used in scout/full loops and should not be removed.
+
+### The Tech Debt
+- Some top markdown text still references older region-based wording from earlier notebook lineage; wording cleanup can be done later for consistency with current spatial-group implementation.
+
+## 2026-03-12 - Restored spatial_group materialization in 03_model_training split setup
+
+### The Change
+- Fixed [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) `spatial_group` KeyError path by restoring the execution block in the data-loading/split cell that:
+  - applies `add_spatial_groups(...)` to `df`
+  - selects pseudo-holdout groups via `select_pseudo_holdout_groups(...)`
+  - creates `df['is_pseudo_valid']`
+  - prints split summary and validates train/holdout group disjointness.
+- Added an explicit guard in `grouped_oof_eval(...)`:
+  - if `spatial_group` is missing, raise a clear runtime message instructing to run cell 8 first.
+
+### The Reasoning
+- The notebook still had helper function definitions for spatial grouping, but the materialization step was absent, causing `KeyError: 'spatial_group'` in scout/full evaluation.
+- Restoring the split setup block and adding a targeted guard prevents silent failure and improves execution-order clarity.
+
+### The Tech Debt
+- This remains notebook order-dependent; extracting split setup into a dedicated reusable function/module would reduce recurrence risk.
+
+## 2026-03-13 - Switched 03_model_training primary feature set from benchmark-4 to full numeric contract
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) feature-set configuration:
+  - Kept legacy benchmark set `C` (`swir22`, `NDMI`, `MNDWI`, `pet`) as optional fallback.
+  - Added `FULL_NUMERIC` feature set as primary, built from contract/data columns with exclusions:
+    - exclude targets
+    - exclude split/meta runtime columns (`spatial_group`, `is_pseudo_valid`)
+    - keep only numeric dtypes to match current preprocessor.
+  - Added `PRIMARY_FEATURE_SET = 'FULL_NUMERIC'`.
+- Rewired `TARGET_SWEEP` to use `PRIMARY_FEATURE_SET` for all targets and both RF variants (`RF_n600_raw`, `RF_n600_Log`).
+- Updated optional diagnostics fallback expression to reference `PRIMARY_FEATURE_SET` when uncommented.
+
+### The Reasoning
+- Using only 4 features defeated the purpose of loading expanded aligned datasets.
+- This change allows immediate training with the wider feature space while preserving the existing RF + gating workflow.
+- Numeric-only filtering avoids breakage because current preprocessing pipeline is numeric-only (`median imputer + scaler`).
+
+### The Tech Debt
+- Non-numeric contract columns are currently excluded; if full 166-column mixed-type training is required, preprocessing must be expanded to handle categorical/datetime features safely (e.g., explicit date transforms and one-hot encoding).
+
+## 2026-03-13 - Added SANLC-specific imputation policy in 03_model_training preprocessor
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) `get_preprocessor(features_used)` to use targeted imputation rules:
+  - SANLC percentage columns (`sanlc2020_pct_*`, `sanlc2022_pct_*`): `SimpleImputer(strategy='constant', fill_value=0.0)`
+  - all other numeric selected features: `SimpleImputer(strategy='median')`
+- Kept `StandardScaler()` in both branches and returned a combined `ColumnTransformer` with separate transformers for SANLC vs non-SANLC numeric blocks.
+- Added guard for empty feature input to fail fast.
+
+### The Reasoning
+- In your pipeline, missing SANLC class columns/values represent absent land-cover share, where `0.0` is semantically correct.
+- Median imputation remains safer for non-SANLC continuous variables.
+- This operationalizes the SANLC assumptions discovered in EDA/contract alignment before model training.
+
+### The Tech Debt
+- Scaling is retained for consistency, though RF models do not require it; this could be simplified later for minor runtime gains.
+- Rule-based SANLC detection depends on naming convention prefixes and should be centralized if schema naming evolves.
+
+## 2026-03-13 - Added submission-stage guardrails in 03_model_training (Freeze Manifest A onward)
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) to harden post-training cells against common execution-order failures:
+  - Restored active no-op `engineer_features(...)` definition and invocation in the feature-engineering cell so submission build can safely call `engineer_features(df_val)`.
+  - Added defensive checks in manifest freeze cell:
+    - explicit error if a target has no `full_df` rows
+    - explicit error if gated candidate pool ends up empty.
+  - Added artifact and feature validation in `predict_from_manifest_entry(...)`:
+    - fail fast if `preproc_path` / `model_path` files are missing
+    - fail fast with clear message if required validation features are missing.
+  - Added pre-check in submission cell for validation/template row mismatch before prediction assignment.
+- Re-ran notebook code-cell syntax validation after the patch.
+
+### The Reasoning
+- Recent runtime failures were caused by missing helper definitions and implicit assumptions about prior cell execution.
+- These guards make failures deterministic and informative, reducing debug time under tight submission windows.
+
+### The Tech Debt
+- Notebook execution is still stateful; converting the freeze/submission path into idempotent functions or a script entrypoint would further reduce order-dependent breakage.
+
