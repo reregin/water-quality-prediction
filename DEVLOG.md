@@ -47,3 +47,21 @@
 - Cluster count (`16`) is static and may need retuning if training distribution changes with incoming master data.
 - Notebook outputs must be re-run to refresh stale printed results and avoid confusion.
 
+## 2026-03-12 - Added benchmark-derived 03c notebook
+
+### The Change
+- Added [03c_model_training_benchmark_derived.ipynb](d:/projects/water-quality-prediction/notebooks/03c_model_training_benchmark_derived.ipynb).
+- Notebook is derived from the benchmark approach and intentionally keeps a simple baseline flow:
+  - 4 features only: `swir22`, `NDMI`, `MNDWI`, `pet`
+  - random 70/30 split
+  - `RandomForestRegressor` per target
+  - submission generation from merged MVP parquet files
+
+### The Reasoning
+- Current strict spatial pipeline in `03_model_training.ipynb` is useful for robustness diagnostics but underperforming leaderboard outcomes.
+- A clean benchmark-aligned anchor notebook gives a stable baseline to iterate from while waiting for new teammate data.
+
+### The Tech Debt
+- Random split is optimistic under geographic shift; this notebook is intentionally a baseline, not a final robustness protocol.
+- No MLflow tracking or grouped CV in this notebook by design; if needed later, add progressively after baseline validation.
+
