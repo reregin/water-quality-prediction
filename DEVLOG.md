@@ -600,3 +600,27 @@
 ### The Tech Debt
 - Theme-based aggregate engineering remains heuristic; future refinement may need target-specific feature selection to avoid over-expansion.
 
+## 2026-03-13 - Added ET/HGB challengers to 03_model_training with RF-anchored manifest policy
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) model bank (cell 17) from RF-only to a controlled comparison set:
+  - `RF_n600_raw`, `RF_n600_Log` (anchor)
+  - `ET_n700_raw`, `ET_n700_Log` (ExtraTrees challengers)
+  - `HGB_n450_raw`, `HGB_n450_Log` (HistGradientBoosting challengers)
+- Added model-specific default parameter blocks and extended `build_model_from_spec(...)` to handle `rf`, `et`, and `hgb` kinds.
+- Rewired `TARGET_SWEEP` so each target evaluates the full ordered model set on `PRIMARY_FEATURE_SET`.
+- Updated manifest freeze logic (cell 26):
+  - `manifest_A` keeps RF-first preference (safety anchor) under dummy-holdout gate.
+  - `manifest_B` takes best gated challenger (no model preference) for TA/EC.
+  - DRP remains conservative with RF-first preference and existing gate behavior.
+- Syntax-validated notebook cells after patching.
+
+### The Reasoning
+- You asked to add model comparison beyond RF with the goal of score improvement.
+- This keeps deployment risk controlled by preserving RF as anchor while allowing challengers to win only when gated metrics justify it.
+- Target-wise challenger selection improves chance of gains without forcing one global model family.
+
+### The Tech Debt
+- Sweep size is now larger and runtime will increase materially; if needed, reduce model list or finalists depth per target.
+- Current challenger/default params are fixed; lightweight target-wise tuning may still be needed for best effect.
+
