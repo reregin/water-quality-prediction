@@ -679,3 +679,26 @@
 ### The Tech Debt
 - Feature set size continues to grow; a target-wise ablation/pruning pass is still needed to remove non-contributing engineered columns.
 - Some thematic keyword mapping for SANLC is heuristic and should eventually be validated against class taxonomy docs.
+
+## 2026-03-13 - Added OSM feature-engineering block and regularization ladder in 03_model_training
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) `engineer_features(...)` to include OSM-specific derived features:
+  - Source transforms per `mine/farm/wastewater`: `osm_log_dist_*`, `osm_inv_dist_*`, `osm_near_*_lt1km`, `osm_near_*_lt5km`, `osm_log_count_*_1km`, `osm_log_count_*_5km`, `osm_local_ratio_*`, `osm_ring_count_*`, `osm_pressure_*`
+  - Aggregates/interactions: `osm_total_pressure`, `farm_rain`, `farm_runoff`, `mine_runoff`, `ww_dry`, `ww_urban`, `farm_crop`, `mine_land`
+  - Added rerun-cleanup for these engineered columns to avoid duplicate/stale features in notebook iterative runs.
+- Updated engineered feature tracking in feature-set cell so new OSM engineered columns are counted in `engineered_cols_in_full`.
+- Replaced simple RF/ET/HGB model set with a regularized mini-ladder in model cell:
+  - Added RF regularized variants (`RF_regA_raw`, `RF_regB_raw`, `RF_regA_Log`)
+  - Added ET regularized variant (`ET_regA_raw`)
+  - Added HGB regularized variants (`HGB_regA_raw`, `HGB_regB_raw`) with `early_stopping`, `validation_fraction`, and `n_iter_no_change`
+- Added compact target-wise model sweep (`TARGET_MODEL_ORDER`) to limit runtime while preserving baseline comparison and regularization coverage.
+
+### The Reasoning
+- OSM raw features are sparse/skewed; transforms and pressure-style composites make them easier for tree models to use under spatial shift.
+- Previous challengers showed CV gains but occasional pseudo-holdout collapse; stronger regularization is needed to improve robustness without dropping RF baseline anchoring.
+- A target-wise compact sweep keeps iteration speed practical under deadline constraints.
+
+### The Tech Debt
+- Feature count has increased; next cleanup step should be fold-stability pruning (drop engineered features with unstable fold importances/effects).
+- Existing output cells in the notebook still contain historical render text from prior runs and may display stale examples until rerun.
