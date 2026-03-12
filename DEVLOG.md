@@ -295,3 +295,33 @@
 - TA/EC/DRP target preferences are hardcoded and should eventually be parameterized for faster experimentation.
 - The notebook still carries legacy cells/markdown from prior model families that can be pruned in a cleanup pass.
 
+## 2026-03-12 - Optimized wide-feature EDA flow for 169-column interim data
+
+### The Change
+- Refactored [01_eda_and_discovery.ipynb](d:/projects/water-quality-prediction/notebooks/01_eda_and_discovery.ipynb) to run efficiently on wide tables (`~169` columns) by introducing EDA guardrails and prioritized plotting.
+- Added notebook-level EDA controls in the setup cell:
+  - sampling cap (`EDA_SAMPLE_ROWS`)
+  - max plot column caps (`MAX_NUM_PLOTS`, `MAX_CAT_PLOTS`, `MAX_SCATTER_FEATURES_PER_TARGET`, `MAX_HEATMAP_FEATURES`)
+  - compact preview cap (`MAX_PREVIEW_COLS`)
+  - helper `sample_rows(...)`.
+- Reworked heavy visualization cells to avoid plotting all columns:
+  - Bird's-eye section now shows first+random preview columns and compact metadata instead of full chunk-by-chunk rendering.
+  - Numeric and categorical distribution plots now run on prioritized subsets.
+  - Correlation heatmap now uses selected candidate features (Spearman) rather than full-matrix plotting.
+  - Missingness visualization now uses top-missing columns + sampled rows.
+  - Feature-vs-target section now uses selected features per target with hexbin plots.
+  - Outlier detection switched to vectorized IQR summary and top-feature charting.
+  - VIF/multicollinearity now runs on a bounded candidate subset for tractable runtime.
+- Added a new section/cell: `Train-Test Drift Check (Optimized)` using KS statistics on prioritized numeric columns.
+- Validated notebook JSON and code-cell syntax after edits.
+
+### The Reasoning
+- Full-feature plotting on 169 columns creates noisy output and slow execution with low diagnostic value.
+- Prioritization (missingness, variance, target correlation) preserves signal while cutting runtime and visual clutter.
+- Adding lightweight drift diagnostics gives a direct sanity check before modeling without requiring full CV runs.
+
+### The Tech Debt
+- Prioritization heuristics are fixed and notebook-local; moving them to reusable utility functions under `src/` would reduce drift.
+- Target correlation screening currently uses sampled Spearman correlation; robustness can be improved with repeated-seed summaries if needed.
+- Geography and LOSO sections remain dependent on geo/date columns and will still be skipped/fail if those fields are absent in future interim snapshots.
+
