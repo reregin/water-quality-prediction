@@ -644,3 +644,38 @@
 ### The Tech Debt
 - [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) still points to `*_iteration*` candidates and should be updated next to consume `*_terra_aligned*` outputs consistently.
 - Existing historical contract files from iteration runs remain in `data/interim`; cleanup policy is not yet standardized.
+
+## 2026-03-13 - Updated 03_model_training input/contract paths to Terra-aligned artifacts
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) path constants/candidates to Terra naming:
+  - `TRAIN_PATH_CANDIDATES` now prefers `../data/interim/master_train_terra_aligned.parquet` then `../data/interim/master_train_terra.parquet`
+  - `VALID_PATH_CANDIDATES` now prefers `../data/interim/master_test_terra_aligned.parquet` then `../data/interim/master_test_terra.parquet`
+  - `CONTRACT_TXT_PATH` now uses `../data/interim/feature_contract_master_terra.txt`
+- Updated matching printed path outputs in notebook JSON so run logs stay consistent with Terra artifacts.
+
+### The Reasoning
+- Preprocessing was moved to Terra files; modeling had to read the same aligned outputs to avoid silently training on stale `iteration` artifacts and mismatched feature contracts.
+
+### The Tech Debt
+- Historical output text in notebook cells can still become stale between runs; run the path-selection cell first each session to verify active sources.
+- We still rely on filename-based dataset switching; central config could reduce future path drift.
+
+## 2026-03-13 - Added Terra-informed high-ROI feature engineering in 03_model_training
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) feature-engineering cell to add low-risk derived features from existing Terra-aligned columns:
+  - Hydroclimate: `aridity_idx`, `water_balance`, `evap_eff`, `runoff_ratio`, `dry_heat`, `temp_range`, `rain_wind_event`
+  - Soil/hydro/pop interactions: `soil_texture_balance`, `soil_fines`, `drainage_proxy`, `upstream_human_pressure`, `stream_power_proxy`, `river_discharge_per_width`, `hydro_pressure_index`, `pop_compaction_1km`, `pop_gradient`, `pop_sum_ratio_1_to_5km`
+  - SANLC aggregates: thematic `share_2020/share_2022`, `ratio_2020/ratio_2022`, `*_delta`, plus `human_land_share_2020/2022/delta`
+- Kept per-class SANLC deltas behind `FE_INCLUDE_CLASS_DELTAS = False` toggle for runtime/noise control.
+- Preserved rerun hygiene by dropping previously engineered columns before rebuilding features.
+- Updated engineered-feature reporting cell to include the new exact feature names and `sanlc_*_ratio_*` patterns when summarizing `FULL_NUMERIC` composition.
+
+### The Reasoning
+- Mapped XAI guidance into derivations that can be created immediately from current Terra schema without waiting for new extraction sources.
+- Prioritized interaction and aggregate features over high-cardinality expansions to reduce instability under pseudo-spatial validation.
+
+### The Tech Debt
+- Feature set size continues to grow; a target-wise ablation/pruning pass is still needed to remove non-contributing engineered columns.
+- Some thematic keyword mapping for SANLC is heuristic and should eventually be validated against class taxonomy docs.
