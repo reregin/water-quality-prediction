@@ -916,6 +916,30 @@
 - This notebook now assumes sentinel paths are present; if dataset source switches, the paths must be edited manually.
 - Contract compatibility is still validated against TXT metadata; if contract file drifts from raw sentinel schema, this cell will fail fast (intentionally).
 
+## 2026-03-13 - DRP-focused feature and sweep upgrade in 03d simple notebook
+
+### The Change
+- Updated [03d_model_training_simple.ipynb](d:/projects/water-quality-prediction/notebooks/03d_model_training_simple.ipynb) to improve DRP behavior with sentinel master data:
+  - Added DRP-specific engineered proxies in `engineer_features(...)`:
+    - point-source wastewater pressure: `drp_ww_inv_dist`, `drp_ww_log_dist`, `drp_ww_log_count_1km/5km`, `drp_point_source_pressure`, `drp_ww_local_ratio`
+    - event runoff and low-flow concentration: `drp_farm_event_runoff`, `drp_lowflow_concentration`, `drp_effluent_lowflow`
+    - wetland/riparian buffering: `drp_wetland_buffer_proxy`, `drp_point_after_buffer`
+    - sediment interactions: `drp_turbidity_proxy`, `drp_sediment_event`, `drp_sediment_lowflow`, `drp_discharge_per_width`
+  - Added DRP-specific feature sets:
+    - `DRP_POINT_SOURCE`
+    - `DRP_EVENT_HYDRO`
+  - Updated DRP sweep in `TARGET_SWEEP` to evaluate DRP feature sets with ET/RF instead of only spectral sets.
+- Kept TA and EC flow intact while preserving TA-specific sets introduced earlier.
+
+### The Reasoning
+- DRP is dominated by episodic and local drivers (wastewater outfalls, rainfall-event runoff, flow-state dilution, and sediment release), so generic spectral-only bundles underfit the mechanism.
+- Target-specific DRP feature bundles let the simple notebook test this hypothesis directly without reintroducing full-pipeline complexity.
+
+### The Tech Debt
+- These DRP proxies are still indirect; no explicit upstream network tracing or facility-condition data is available.
+- Added DRP interaction features can increase collinearity; post-run pruning/ablation is still needed to avoid unnecessary noise.
+- Submission tracker integration for 03d runs remains manual.
+
 ## 2026-03-13 - Extracted independent training notebook 03e from 03_model_training
 
 ### The Change
