@@ -726,3 +726,71 @@
 ### The Tech Debt
 - RFECV runtime can be high on large feature sets; further acceleration may require staged prefiltering or larger `step` values for quick sweeps.
 - Submission variants continue to grow; a small experiment registry table (run id -> shot -> upload result) should be persisted outside notebook output for cleaner tracking.
+
+## 2026-03-13 - Added persistent leaderboard submission tracker CSV
+
+### The Change
+- Added [leaderboard_submission_tracker.csv](d:/projects/water-quality-prediction/reports/leaderboard_submission_tracker.csv) with a fixed schema for submission-level tracking:
+  - `entry_id`, `submitted_at_local`, `leaderboard_score`, `submission_variant`, `description`, `notebook_path`, `data_source_tag`, `split_strategy_tag`, `manifest_tag`, `notes`
+- Seeded the tracker with the current positive leaderboard run:
+  - `2026-03-13 08:12:37`, score `0.0149`, variant `D`, description `Spatial-CV RF/ET + OSM/terra, DRP soft-hedge (dummy-gated)`.
+
+### The Reasoning
+- Notebook outputs and MLflow runs are useful internally but not ideal for quick submission-history decisions under tight slot budgets.
+- A single CSV registry makes it easier to compare upload outcome vs pipeline variant before using remaining leaderboard submissions.
+
+### The Tech Debt
+- Tracker currently stores submission-level metrics only; it should later include linked local metrics (`r2`, `holdout_r2`, `delta_vs_dummy`) and file hashes for stronger reproducibility.
+- No automation yet for appending new rows directly from notebook runs; entries are currently manual.
+
+## 2026-03-13 - Patched 03_model_training to spatial v2 split with contiguous holdout + buffer exclusion
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) split configuration to `spatial v2`:
+  - `SPLIT_STRATEGY = SpatialV2_GroupKFold+ContiguousHoldout+Buffer`
+  - `GROUP_DEFINITION_VERSION = kmeans_latlon_v3_contiguous_holdout_buffer`
+  - Added `HOLDOUT_BUFFER_DEG` and tightened holdout margin.
+- Replaced the previous nearest-group holdout selector with a contiguous-growth selector:
+  - seed from validation-footprint bbox overlap
+  - grow holdout by nearest-centroid adjacency until `min_groups/min_frac` constraints are satisfied.
+- Added `assign_spatial_v2_masks(...)`:
+  - `is_pseudo_valid` for holdout groups
+  - `is_buffer_excluded` for near-boundary non-holdout rows
+  - `is_spatial_v2_active` for rows eligible in CV/selection.
+- Wired downstream cells to respect spatial v2 masks:
+  - `grouped_oof_eval(...)` now filters to `is_spatial_v2_active`
+  - RFECV train mask now uses `(~is_pseudo_valid) & is_spatial_v2_active`
+  - feature-set `RESERVED_COLS` now excludes `is_buffer_excluded` and `is_spatial_v2_active`.
+
+### The Reasoning
+- Prior pseudo-spatial split selected groups by proximity only and could still include boundary-adjacent rows that leak location signal.
+- Contiguous holdout plus explicit buffer exclusion is a stricter proxy for unseen-area generalization and closer to your observed train/valid geography pattern.
+- Keeping the rest of the modeling pipeline intact preserves comparability while upgrading only the validation geometry.
+
+### The Tech Debt
+- Contiguity is centroid-based and still heuristic; polygon/H3-based region masks would be more faithful if time allows.
+- Buffer uses axis-aligned bbox expansion; geodesic distance buffering would be more precise.
+- Historical notebook outputs are stale and should be refreshed by rerunning split + scout/full cells end-to-end.
+
+## 2026-03-13 - Logged latest 03_model_training run into tracker and added structured local metrics columns
+
+### The Change
+- Updated [leaderboard_submission_tracker.csv](d:/projects/water-quality-prediction/reports/leaderboard_submission_tracker.csv):
+  - Expanded schema to include per-target local metrics:
+    - `local_ta_r2`, `local_ec_r2`, `local_drp_r2`
+    - `local_ta_holdout_r2`, `local_ec_holdout_r2`, `local_drp_holdout_r2`
+  - Added `status` column to distinguish submitted vs local-only runs.
+- Added a new row for the latest executed notebook snapshot from [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb):
+  - `entry_id=2026-03-13_0924_local`
+  - split tag: `SpatialV2_GroupKFold+ContiguousHoldout+Buffer`
+  - status: `local_only_not_submitted`
+  - captured local manifest-A metrics for TA/EC/DRP.
+- Preserved prior submitted row (`2026-03-13_081237`, leaderboard `0.0149`) and backfilled its local metrics for direct run-to-run comparison.
+
+### The Reasoning
+- The earlier tracker was submission-centric only; it could not support apples-to-apples local metric comparisons against prior runs.
+- Adding local metric columns enables fast go/no-go checks before consuming leaderboard slots.
+
+### The Tech Debt
+- Current comparison values are still manually derived from notebook output text; this should be auto-exported from the notebook run objects to avoid transcription drift.
+- `submitted_at_local` for local-only runs may reflect notebook stamp granularity rather than exact cell finish time.
