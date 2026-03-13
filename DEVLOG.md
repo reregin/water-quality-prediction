@@ -896,6 +896,26 @@
 - Several proxies are correlated and may need post-run pruning to prevent redundant feature noise.
 - The notebook still depends on heuristic pseudo-holdout and may under/over-penalize TA depending on split geometry.
 
+## 2026-03-13 - Simplified 03d data loading to raw sentinel train/test (removed aligned/fallback path logic)
+
+### The Change
+- Updated [03d_model_training_simple.ipynb](d:/projects/water-quality-prediction/notebooks/03d_model_training_simple.ipynb) data-loading cell:
+  - Removed candidate/fallback path resolution (`*_CANDIDATES` and `pick_first_existing`).
+  - Hard-pinned input paths to:
+    - `../data/interim/master_train_sentinel.parquet`
+    - `../data/interim/master_test_sentinel.parquet`
+  - Kept explicit path existence checks and contract-file guard (`feature_contract_master_sentinel.txt`).
+- Updated data-loading markdown text to reflect direct raw sentinel usage.
+- Cleared stale cached output in the data-loading cell so old aligned-path prints do not mislead future runs.
+
+### The Reasoning
+- User confirmed train/test schema already matches and requested removal of unnecessary aligned fallback complexity in the simple notebook.
+- Direct path usage reduces branching and makes run behavior easier to reason about.
+
+### The Tech Debt
+- This notebook now assumes sentinel paths are present; if dataset source switches, the paths must be edited manually.
+- Contract compatibility is still validated against TXT metadata; if contract file drifts from raw sentinel schema, this cell will fail fast (intentionally).
+
 ## 2026-03-13 - Extracted independent training notebook 03e from 03_model_training
 
 ### The Change
