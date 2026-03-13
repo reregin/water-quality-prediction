@@ -794,3 +794,57 @@
 ### The Tech Debt
 - Current comparison values are still manually derived from notebook output text; this should be auto-exported from the notebook run objects to avoid transcription drift.
 - `submitted_at_local` for local-only runs may reflect notebook stamp granularity rather than exact cell finish time.
+
+## 2026-03-13 - Enriched submission tracker with explicit run-to-run comparison fields
+
+### The Change
+- Updated [leaderboard_submission_tracker.csv](d:/projects/water-quality-prediction/reports/leaderboard_submission_tracker.csv) to include comparison-oriented columns:
+  - `compare_to_entry_id`
+  - `delta_ta_holdout_vs_compare`
+  - `delta_ec_holdout_vs_compare`
+  - `delta_drp_holdout_vs_compare`
+  - `recommend_submit`
+- Filled comparison values for `2026-03-13_0924_local` against the last positive submitted baseline `2026-03-13_081237`.
+- Marked decision signal for the inspected local run as `recommend_submit=no` based on holdout degradation.
+
+### The Reasoning
+- We already inspect deltas verbally after runs; keeping them in the tracker avoids re-deriving the same decision context under submission-slot pressure.
+- Explicit recommendation flags reduce accidental low-confidence submissions during rapid iteration.
+
+### The Tech Debt
+- `recommend_submit` is currently a manual flag; it should be computed from agreed gating rules to avoid subjective drift.
+- Comparison currently targets one baseline entry id at a time; multi-baseline views (best LB, latest submitted, latest local) are not yet automated.
+
+## 2026-03-13 - Logged latest 03_model_training local run (#2) and compared against submitted baseline
+
+### The Change
+- Updated [leaderboard_submission_tracker.csv](d:/projects/water-quality-prediction/reports/leaderboard_submission_tracker.csv) with a new local-only row:
+  - `entry_id=2026-03-13_2009_local`
+  - source from notebook outputs in [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) (`submission_20260313_2009_*` block / manifest A).
+- Stored extracted local metrics for TA/EC/DRP and holdout metrics, then compared directly to submitted baseline `2026-03-13_081237` (~0.015 LB).
+- Filled comparison deltas and set `recommend_submit=no` for this run.
+
+### The Reasoning
+- User requested explicit analysis of the latest notebook output and comparison versus the submission tracker while preserving status (`#2` not submitted).
+- Keeping local run #2 in the tracker avoids repeated manual notebook parsing and makes slot decisions auditable.
+
+### The Tech Debt
+- Notebook-output parsing is still manual/text-based; this should be replaced by a structured export cell that writes manifest metrics directly to CSV.
+- Current tracker cannot auto-calculate comparison deltas on append; those values are currently entered explicitly.
+
+## 2026-03-13 - Added computed overall decision score to submission tracker
+
+### The Change
+- Updated [leaderboard_submission_tracker.csv](d:/projects/water-quality-prediction/reports/leaderboard_submission_tracker.csv) with new column:
+  - `overall_local_decision_score`
+- Backfilled scores for all tracked runs using:
+  - `(local_ta_holdout_r2 + local_ec_holdout_r2 + local_drp_holdout_r2) / 3`
+- Kept existing `recommend_submit` flags, now supported by a single scalar summary metric.
+
+### The Reasoning
+- User requested a compact computed signal to compare runs quickly before spending submission slots.
+- Mean holdout R2 across targets is simple, transparent, and directly aligned with the tracker’s per-target holdout fields.
+
+### The Tech Debt
+- `recommend_submit` is still not auto-derived from `overall_local_decision_score` plus DRP safety gates; this should be automated to avoid manual inconsistency.
+- Score aggregation is currently unweighted; if competition target weighting is known, we should switch to weighted aggregation.
