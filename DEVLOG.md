@@ -848,3 +848,94 @@
 ### The Tech Debt
 - `recommend_submit` is still not auto-derived from `overall_local_decision_score` plus DRP safety gates; this should be automated to avoid manual inconsistency.
 - Score aggregation is currently unweighted; if competition target weighting is known, we should switch to weighted aggregation.
+
+## 2026-03-13 - Created simplified training notebook 03d with sentinel-first baseline flow
+
+### The Change
+- Added [03d_model_training_simple.ipynb](d:/projects/water-quality-prediction/notebooks/03d_model_training_simple.ipynb).
+- Kept the same high-level section flow as `03_model_training.ipynb` (config, loading, FE, feature sets, preprocessing, models, grouped eval, scout/full stages, manifest, submission build).
+- Simplified the modeling approach:
+  - master sentinel aligned data as default input
+  - lightweight feature engineering only
+  - compact feature sets (`SPECTRAL_CORE`, `SPECTRAL_PLUS_COORDS`, `MIXED_LITE`)
+  - small model family (RF/ET/HGB baseline variants)
+  - simple pseudo-holdout grouped evaluation and two submission shots (A direct, B DRP hedge).
+- Embedded target-specific realistic local ceiling ranges in the notebook config output.
+
+### The Reasoning
+- Current pipeline complexity made it harder to separate true signal from validation machinery.
+- A clean baseline notebook allows faster iteration and clearer attribution of what actually improves score.
+- Sentinel-first setup aligns with the current direction to prioritize transferable spectral signal.
+
+### The Tech Debt
+- The simplified notebook still uses heuristic pseudo-holdout construction and should be recalibrated if leaderboard behavior shifts.
+- Manifest-to-tracker export is not automated in `03d`; run logging remains manual.
+
+## 2026-03-13 - TA-focused feature-combo patch in 03d simple notebook
+
+### The Change
+- Updated [03d_model_training_simple.ipynb](d:/projects/water-quality-prediction/notebooks/03d_model_training_simple.ipynb) with TA-targeted feature logic:
+  - Added engineered TA proxy features in `engineer_features(...)`:
+    - `soil_fines_0_5cm`, `soil_texture_balance`
+    - `residence_time_proxy`, `flatness_proxy`, `basin_flatness_proxy`
+    - `rain_dilution_proxy`, `event_runoff_proxy`
+    - `weathering_capacity_proxy`, `contact_weathering_proxy`
+  - Added TA-specific frozen feature sets:
+    - `TA_HYDRO_GEO`
+    - `TA_RESIDENCE_SOIL`
+  - Updated `TARGET_SWEEP['Total Alkalinity']` to use TA-specific sets instead of generic `MIXED_LITE`.
+- Kept EC/DRP sweep definitions unchanged to isolate TA hypothesis impact.
+
+### The Reasoning
+- User observed TA not learning stable patterns under the simple setup.
+- TA domain assumptions (bedrock/weathering residence, slope/flow speed, soil weathering surface, rainfall dilution) were translated into explicit proxy features and TA-only feature combinations.
+- This preserves notebook simplicity while making TA model inputs more mechanistic and target-specific.
+
+### The Tech Debt
+- TA geology is still proxied from available covariates; no direct lithology/bedrock layer is included yet.
+- Several proxies are correlated and may need post-run pruning to prevent redundant feature noise.
+- The notebook still depends on heuristic pseudo-holdout and may under/over-penalize TA depending on split geometry.
+
+## 2026-03-13 - Extracted independent training notebook 03e from 03_model_training
+
+### The Change
+- Added [03e_model_training_independent.ipynb](d:/projects/water-quality-prediction/notebooks/03e_model_training_independent.ipynb) as an extracted standalone version of [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb).
+- Inlined environment/config behavior directly inside the notebook (no external `src/config_local.py` or `src/config_snowflake.py` imports):
+  - `ENV` switch (`local` vs `snowflake`)
+  - `MLFLOW_URI` assignment
+  - `load_data()` and `save_artifacts(...)` function definitions for both environments.
+- Removed aligned-fallback file-selection logic from the data-loading cell and set explicit sentinel paths:
+  - `../data/interim/master_train_sentinel.parquet`
+  - `../data/interim/master_test_sentinel.parquet`
+- Kept the rest of the training/evaluation pipeline structure intact and cleared code-cell outputs in the new notebook.
+
+### The Reasoning
+- The user requested a fully independent notebook that can run without relying on config modules.
+- Inlining the config branch logic inside the notebook preserves original behavior while making execution self-contained.
+- Direct sentinel-path loading removes unnecessary fallback complexity now that the dataset pairing is stable.
+
+### The Tech Debt
+- The inlined `load_data()` local branch still mirrors legacy config behavior (`master_train.parquet`) and is currently not wired into the sentinel-loading cell; if desired, unify these paths in one source of truth.
+- Snowflake validation/test loading is still local-path based in this notebook flow; a full Snowflake-native validation path is not implemented yet.
+
+## 2026-03-13 - Updated markdown descriptions in 03 and 03e training notebooks
+
+### The Change
+- Updated descriptive markdown cells in [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) and [03e_model_training_independent.ipynb](d:/projects/water-quality-prediction/notebooks/03e_model_training_independent.ipynb).
+- Replaced stale narrative that referenced `Region`, old XGB-focused shortlist text, and 3-shot outputs.
+- Aligned descriptions with current implemented flow:
+  - spatial-group CV (`spatial_group`, pseudo-holdout, buffer-exclusion)
+  - tree-ensemble bank (RF/ET/HGB) and optional RFECV
+  - Manifest A/B freezing logic
+  - four submission variants (A/B/C/D)
+- Added notebook-specific context:
+  - `03_model_training.ipynb`: config imported from `src/config_local.py` / `src/config_snowflake.py`
+  - `03e_model_training_independent.ipynb`: config logic inlined and direct sentinel file paths.
+
+### The Reasoning
+- User requested markdown description adjustment; previous text no longer matched the code path and could mislead reruns.
+- Keeping notebook narrative synchronized with code reduces onboarding time and run mistakes during deadline iterations.
+
+### The Tech Debt
+- Some section headings remain generic and could be standardized across all `03*` notebooks via shared templates.
+- Optional diagnostics are still documented as comments rather than toggles; adding parameterized run modes would improve consistency.
