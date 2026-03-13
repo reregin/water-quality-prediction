@@ -702,3 +702,27 @@
 ### The Tech Debt
 - Feature count has increased; next cleanup step should be fold-stability pruning (drop engineered features with unstable fold importances/effects).
 - Existing output cells in the notebook still contain historical render text from prior runs and may display stale examples until rerun.
+
+## 2026-03-13 - Added Shot D submission hedge and optional spatial-group RFECV path
+
+### The Change
+- Updated [03_model_training.ipynb](d:/projects/water-quality-prediction/notebooks/03_model_training.ipynb) model/sweep cell to include an optional RFECV stage:
+  - Added `RFECV_ENABLED` toggle (`False` by default), `RFECV_STEP`, `RFECV_MIN_FEATURES`, and `RFECV_N_JOBS`
+  - RFECV uses `GroupKFold` on `spatial_group` and runs on train-only groups (`~is_pseudo_valid`) to avoid pseudo-holdout leakage into feature selection
+  - Creates target-specific feature sets (`RFECV_<target_key>`) when enabled
+  - `TARGET_SWEEP` now maps each target to either RFECV-selected features or `PRIMARY_FEATURE_SET` fallback.
+- Expanded submission construction section from Shot A/B/C to Shot A/B/C/D:
+  - Added **Shot D** (`D_drp_softhedge`) with robust DRP soft hedge
+  - Shot D always includes a small DRP model contribution (even when DRP gate is negative):
+    - `alpha=0.25` if DRP gate positive
+    - `alpha=0.05` if DRP gate negative
+  - Added path save/export and diagnostics placeholders for Shot D.
+- Updated markdown headers and diagnostics comments to include Shot D upload path/tracker ordering.
+
+### The Reasoning
+- Recent leaderboard drop despite local positives pointed to DRP over-conservatism from hard median fallback. Shot D introduces a low-risk way to recover model signal without fully trusting unstable DRP models.
+- RFECV is added as a controlled, optional tool so feature pruning can be tested under spatial-group CV constraints rather than random split assumptions.
+
+### The Tech Debt
+- RFECV runtime can be high on large feature sets; further acceleration may require staged prefiltering or larger `step` values for quick sweeps.
+- Submission variants continue to grow; a small experiment registry table (run id -> shot -> upload result) should be persisted outside notebook output for cleaner tracking.
